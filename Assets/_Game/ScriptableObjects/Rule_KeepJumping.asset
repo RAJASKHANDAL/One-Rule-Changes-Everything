@@ -1,0 +1,27 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 674c69e97ae74fb45964eeeee1d7b54e, type: 3}
+  m_Name: Rule_KeepJumping
+  m_EditorClassIdentifier: Assembly-CSharp::RuleDefinition
+  id: keep_jumping
+  displayName: KEEP JUMPING
+  subtitle: DON'T STAY GROUNDED
+  description: Do not remain grounded too long.
+  glyph: ^
+  accent: {r: 0.4, g: 0.68, b: 1, a: 1}
+  duration: 14
+  warningDuration: 2.5
+  difficulty: 2
+  minSurvivalTime: 30
+  cooldown: 30
+  incompatibleWith:
+  - gravity_flip
