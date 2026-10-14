@@ -6,22 +6,27 @@ public class MainMenuUI : MonoBehaviour
     Text bestText;
     GameManager gm;
 
-    public static MainMenuUI Create(Transform parent, SettingsPanel settings, HowToPlayPanel howTo)
+    public static MainMenuUI Create(Transform parent, SettingsPanel settings, HowToPlayPanel howTo, CosmeticsPanel cosmetics)
     {
         var rt = UIKit.Rect("MainMenu", parent);
         UIKit.Stretch(rt);
         var menu = rt.gameObject.AddComponent<MainMenuUI>();
-        menu.Build(rt, settings, howTo);
+        menu.Build(rt, settings, howTo, cosmetics);
         return menu;
     }
 
     public void Show(bool visible)
     {
         gameObject.SetActive(visible);
-        if (visible && bestText != null) bestText.text = "BEST SCORE  <color=#" + UIKit.Hex(UIKit.Gold) + ">" + gm.BestScore + "</color>";
+        if (visible && bestText != null)
+        {
+            int bt = Mathf.FloorToInt(gm.BestTime);
+            bestText.text = "BEST SCORE  <color=#" + UIKit.Hex(UIKit.Gold) + ">" + gm.BestScore + "</color>      BEST TIME  <color=#" + UIKit.Hex(UIKit.Gold) + ">" +
+                            (bt / 60).ToString("00") + ":" + (bt % 60).ToString("00") + "</color>      COINS  <color=#" + UIKit.Hex(UIKit.Gold) + ">" + Wallet.Coins + "</color>";
+        }
     }
 
-    void Build(RectTransform root, SettingsPanel settings, HowToPlayPanel howTo)
+    void Build(RectTransform root, SettingsPanel settings, HowToPlayPanel howTo, CosmeticsPanel cosmetics)
     {
         gm = GameManager.Instance;
 
@@ -39,7 +44,6 @@ public class MainMenuUI : MonoBehaviour
             "<color=#" + UIKit.Hex(UIKit.Cyan) + ">CHANGES</color> <color=#" + UIKit.Hex(UIKit.Pink) + ">EVERYTHING</color>",
             76, Color.white, TextAnchor.MiddleLeft, FontStyle.Bold, true);
         UIKit.Place(changes.rectTransform, new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(114f, -218f), new Vector2(1100f, 100f));
-
         var changesOutline = changes.gameObject.AddComponent<Outline>();
         changesOutline.effectColor = new Color(0.25f, 0.1f, 0.6f, 0.9f);
         changesOutline.effectDistance = new Vector2(3f, -3f);
@@ -48,20 +52,21 @@ public class MainMenuUI : MonoBehaviour
         UIKit.Place(tag.rectTransform, new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(118f, -318f), new Vector2(900f, 44f));
 
         var play = UIKit.MakeButton(root, "Play", "PLAY", new Vector2(420f, 96f), new Color(1f, 0.25f, 0.45f, 1f), new Color(1f, 0.65f, 0.8f), Color.white, 52, () => gm.StartRun());
-        UIKit.Place(play.GetComponent<RectTransform>(), new Vector2(0f, 0.5f), new Vector2(0f, 0.5f), new Vector2(120f, -110f), new Vector2(420f, 96f));
+        UIKit.Place(play.GetComponent<RectTransform>(), new Vector2(0f, 0.5f), new Vector2(0f, 0.5f), new Vector2(120f, -100f), new Vector2(420f, 96f));
 
         var navy = new Color(0.08f, 0.12f, 0.3f, 0.92f);
-        MenuButton(root, "Settings", "SETTINGS", -215f, navy, settings.Open);
-        MenuButton(root, "HowToPlay", "HOW TO PLAY", -293f, navy, howTo.Open);
-        MenuButton(root, "Quit", "QUIT", -371f, navy, gm.QuitGame);
+        MenuButton(root, "Cosmetics", "COSMETICS", -190f, navy, cosmetics.Open);
+        MenuButton(root, "Settings", "SETTINGS", -262f, navy, settings.Open);
+        MenuButton(root, "HowToPlay", "HOW TO PLAY", -334f, navy, howTo.Open);
+        MenuButton(root, "Quit", "QUIT", -406f, navy, gm.QuitGame);
 
-        bestText = UIKit.Label(root, "Best", "", 30, UIKit.Lavender, TextAnchor.MiddleLeft);
-        UIKit.Place(bestText.rectTransform, new Vector2(0f, 0f), new Vector2(0f, 0f), new Vector2(120f, 50f), new Vector2(600f, 44f));
+        bestText = UIKit.Label(root, "Best", "", 26, UIKit.Lavender, TextAnchor.MiddleLeft);
+        UIKit.Place(bestText.rectTransform, new Vector2(0f, 0f), new Vector2(0f, 0f), new Vector2(120f, 30f), new Vector2(900f, 40f));
     }
 
     static void MenuButton(Transform parent, string name, string label, float y, Color fill, System.Action onClick)
     {
-        var b = UIKit.MakeButton(parent, name, label, new Vector2(340f, 64f), fill, UIKit.Border, Color.white, 30, onClick);
-        UIKit.Place(b.GetComponent<RectTransform>(), new Vector2(0f, 0.5f), new Vector2(0f, 0.5f), new Vector2(120f, y), new Vector2(340f, 64f));
+        var b = UIKit.MakeButton(parent, name, label, new Vector2(340f, 60f), fill, UIKit.Border, Color.white, 28, onClick);
+        UIKit.Place(b.GetComponent<RectTransform>(), new Vector2(0f, 0.5f), new Vector2(0f, 0.5f), new Vector2(120f, y), new Vector2(340f, 60f));
     }
 }

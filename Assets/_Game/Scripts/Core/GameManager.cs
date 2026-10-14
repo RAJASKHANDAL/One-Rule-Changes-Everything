@@ -2,11 +2,16 @@ using System;
 using UnityEngine;
 using UnityEngine.InputSystem;
 
-/// <summary>Owns the game state machine, run statistics, scoring (incl. skill bonuses) and run lifecycle (start / pause / game over / restart).</summary>
+/// <summary>
+/// Owns the game state machine, run statistics (the run summary), scoring incl. skill bonuses, and the run lifecycle
+/// (start / pause / game over / restart). Feature managers (rules, intensity, combo, missions, ...) are referenced, not duplicated.
+/// </summary>
 [DefaultExecutionOrder(-100)]
 public class GameManager : MonoBehaviour
 {
     public const string BestScoreKey = "OneRule.BestScore";
+    public const string BestTimeKey = "OneRule.BestTime";
+    public const string RunsKey = "OneRule.Runs";
     public static GameManager Instance { get; private set; }
 
     [Header("Scene references")]
@@ -18,6 +23,10 @@ public class GameManager : MonoBehaviour
     public CameraRig cameraRig;
     public ArenaController arena;
     public IntensityManager intensity;
+    public CoinComboManager combo;
+    public NearMissDetector nearMiss;
+    public MissionManager missions;
+    public MutationManager mutations;
 
     [Header("Scoring")]
     public float pointsPerSecond = 10f;
@@ -32,23 +41,35 @@ public class GameManager : MonoBehaviour
     public int coinStreakBonus = 20;
     public int coinStreakLength = 5;
     public int maxCoinStreakBonuses = 10;
+    [Tooltip("Score multiplier while on the last heart (risk reward, kept small so it never feels like a requirement).")]
+    [Range(1f, 1.5f)] public float clutchScoreMultiplier = 1.25f;
 
     public GameState State { get; private set; } = GameState.MainMenu;
     public float SurvivalTime { get; private set; }
     public int Score => Mathf.FloorToInt(scoreAccum);
     public int Coins { get; private set; }
     public int RulesSurvived { get; private set; }
+    public int RulesSinceDamage { get; private set; }
     public int MasteredRules { get; private set; }
-    public int BestCombo { get; private set; }
+    public int MissionsCompleted => missions != null ? missions.CompletedCount : 0;
+    public int BestCombo => combo != null ? combo.BestCombo : 0;
+    public int MutationsSurvived => mutations != null ? mutations.MutationsSurvived : 0;
     public int BestScore { get; private set; }
+    public float BestTime { get; private set; }
     public bool NewBest { get; private set; }
+    public bool NewBestTime { get; private set; }
+    public bool WasFirstRun { get; private set; }
     public float HighestIntensity => intensity != null ? intensity.Peak : 0f;
+    public float ScoreMultiplier => health != null && health.IsLow && !health.IsDead ? clutchScoreMultiplier : 1f;
+    public string ContextMessage { get; private set; } = "";
 
     public event Action<GameState, GameState> StateChanged;
     /// <summary>Raised after the world has been reset for a new run (or the menu). Listeners clear their temporary state.</summary>
     public event Action RunReset;
     /// <summary>Raised when a skill bonus is awarded: label, points.</summary>
     public event Action<string, int> BonusAwarded;
+    /// <summary>Raised once per collected coin with the coin's world position.</summary>
+    public event Action<Vector3> CoinCollected;
 
     float scoreAccum;
     int coinStreak, streakBonusesAwarded;
@@ -60,9 +81,11 @@ public class GameManager : MonoBehaviour
         if (Instance != null && Instance != this) { Destroy(gameObject); return; }
         Instance = this;
         BestScore = PlayerPrefs.GetInt(BestScoreKey, 0);
+        BestTime = PlayerPrefs.GetFloat(BestTimeKey, 0f);
         InputModifier.Clear();
         StatusBus.ClearAll();
-        if (player == null || health == null || gravity == null || rules == null || coins == null || cameraRig == null || arena == null || intensity == null)
+        if (player == null || health == null || gravity == null || rules == null || coins == null || cameraRig == null || arena == null
+            || intensity == null || combo == null || nearMiss == null || missions == null || mutations == null)
             Debug.LogError("GameManager: one or more scene references are missing.", this);
     }
 
@@ -90,7 +113,7 @@ public class GameManager : MonoBehaviour
         {
             float dt = Time.deltaTime;
             SurvivalTime += dt;
-            scoreAccum += pointsPerSecond * dt;
+            scoreAccum += pointsPerSecond * dt * ScoreMultiplier;
 
             // near-death bonus: survive a while on the last heart (once per run)
             if (!nearDeathAwarded && health.Current == 1)
@@ -140,8 +163,8 @@ public class GameManager : MonoBehaviour
 
     void ResetStats()
     {
-        SurvivalTime = 0f; scoreAccum = 0f; Coins = 0; RulesSurvived = 0; NewBest = false;
-        MasteredRules = 0; BestCombo = 0;
+        SurvivalTime = 0f; scoreAccum = 0f; Coins = 0; RulesSurvived = 0; RulesSinceDamage = 0; NewBest = false; NewBestTime = false;
+        MasteredRules = 0; ContextMessage = "";
         coinStreak = 0; streakBonusesAwarded = 0; lowHealthTime = 0f; nearDeathAwarded = false;
     }
 
@@ -156,6 +179,9 @@ public class GameManager : MonoBehaviour
         player.ResetPlayer();
         coins.ResetCoins();
         intensity.ResetRun();
+        combo.ResetRun();
+        nearMiss.ResetRun();
+        mutations.ResetRun();
         cameraRig.SnapToTarget();
     }
 
@@ -164,6 +190,7 @@ public class GameManager : MonoBehaviour
         if (State == GameState.Playing) return;
         ResetWorld();
         ResetStats();
+        missions.ResetRun();
         Time.timeScale = 1f;
         RunReset?.Invoke();
         SetState(GameState.Playing);
@@ -189,6 +216,7 @@ public class GameManager : MonoBehaviour
         Time.timeScale = 1f;
         ResetWorld();
         ResetStats();
+        missions.ResetRun();
         RunReset?.Invoke();
         SetState(GameState.MainMenu);
     }
@@ -196,16 +224,18 @@ public class GameManager : MonoBehaviour
     public void OnPlayerDied()
     {
         if (State != GameState.Playing) return;
+
+        WasFirstRun = PlayerPrefs.GetInt(RunsKey, 0) == 0;
+        PlayerPrefs.SetInt(RunsKey, PlayerPrefs.GetInt(RunsKey, 0) + 1);
         NewBest = Score > BestScore;
-        if (NewBest)
-        {
-            BestScore = Score;
-            PlayerPrefs.SetInt(BestScoreKey, BestScore);
-            PlayerPrefs.Save();
-        }
+        if (NewBest) { BestScore = Score; PlayerPrefs.SetInt(BestScoreKey, BestScore); }
+        NewBestTime = SurvivalTime > BestTime;
+        if (NewBestTime) { BestTime = SurvivalTime; PlayerPrefs.SetFloat(BestTimeKey, BestTime); }
+        PlayerPrefs.Save();
+        ContextMessage = BuildContextMessage();
         SetState(GameState.GameOver);
 
-        // Stop all rules and restore shared state; final statistics (incl. peak intensity) are preserved until the next run.
+        // Stop all rules and restore shared state; the run summary (incl. peak intensity) is preserved until the next run.
         StatusBus.ClearAll();
         rules.ResetAll();
         gravity.ResetGravity();
@@ -213,16 +243,34 @@ public class GameManager : MonoBehaviour
         arena.ResetArena();
         player.OnDeath();
         cameraRig.Shake(0.6f, 0.5f);
-        AudioManager.Play(Sfx.GameOver);
+        AudioManager.Play(NewBest ? Sfx.NewBest : Sfx.GameOver);
+    }
+
+    string BuildContextMessage()
+    {
+        if (WasFirstRun) return "First run. Learn the rules.";
+        if (NewBest) return "New personal best!";
+        if (SurvivalTime >= 90f) return "You survived the chaos!";
+        if (MissionsCompleted >= missions.missionCount) return "Every mission done. Brilliant adapting!";
+        if (SurvivalTime >= 45f) return "Getting faster!";
+        return "Every run teaches a rule. Go again!";
     }
 
     // ------------------------------------------------------------------ scoring events
 
-    public void AddCoin()
+    /// <summary>Collects a coin. <paramref name="valueMultiplier"/> is 1 for normal coins and higher for risky coins.</summary>
+    public void AddCoin(int valueMultiplier = 1, Vector3 position = default)
     {
         if (State != GameState.Playing) return;
         Coins++;
-        scoreAccum += pointsPerCoin;
+        Wallet.Add(valueMultiplier);
+
+        int basePoints = pointsPerCoin * Mathf.Max(1, valueMultiplier);
+        int comboBonusPoints = combo.RegisterCoin(basePoints);
+        scoreAccum += (basePoints + comboBonusPoints) * ScoreMultiplier;
+        if (comboBonusPoints > 0) BonusAwarded?.Invoke("COIN COMBO x" + combo.Count, comboBonusPoints);
+
+        CoinCollected?.Invoke(position);
         coinStreak++;
         if (coinStreakLength > 0 && coinStreak % coinStreakLength == 0 && streakBonusesAwarded < maxCoinStreakBonuses)
         {
@@ -231,13 +279,14 @@ public class GameManager : MonoBehaviour
         }
     }
 
-    /// <summary>Called by PlayerHealth after damage was applied; breaks the coin streak.</summary>
-    public void OnDamageTaken() { coinStreak = 0; }
+    /// <summary>Called by PlayerHealth after damage was applied; breaks the coin streak and the no-damage rule counter.</summary>
+    public void OnDamageTaken() { coinStreak = 0; RulesSinceDamage = 0; }
 
     public void RuleCompleted()
     {
         if (State != GameState.Playing) return;
         RulesSurvived++;
+        RulesSinceDamage++;
         scoreAccum += pointsPerRule;
     }
 
@@ -251,8 +300,14 @@ public class GameManager : MonoBehaviour
     public void ComboCompleted(int size)
     {
         if (State != GameState.Playing) return;
-        BestCombo = Mathf.Max(BestCombo, size);
-        AddBonus("COMBO SURVIVED", comboBonus);
+        AddBonus("RULE COMBO SURVIVED", comboBonus);
+    }
+
+    public void OnMissionCompleted(Mission mission)
+    {
+        if (State != GameState.Playing) return;
+        Wallet.Add(mission.RewardCoins);
+        AddBonus("MISSION COMPLETE", mission.RewardScore);
     }
 
     public void AddBonus(string label, int points)
@@ -263,8 +318,14 @@ public class GameManager : MonoBehaviour
         BonusAwarded?.Invoke(label, points);
     }
 
+#if UNITY_EDITOR
+    /// <summary>Editor-only test hook: sets the current-run survival time (used by the automated play-through).</summary>
+    public void DebugSetSurvivalTime(float seconds) { SurvivalTime = seconds; }
+#endif
+
     public void QuitGame()
     {
+        PlayerPrefs.Save();
 #if UNITY_EDITOR
         UnityEditor.EditorApplication.isPlaying = false;
 #else

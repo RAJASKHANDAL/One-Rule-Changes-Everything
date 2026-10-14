@@ -6,6 +6,10 @@ public class PlayerVisual : MonoBehaviour
     public Transform legL, legR, armL, armR, scarfTail;
     public Renderer[] renderers;
     public ParticleSystem dust;
+    [Header("Cosmetics (visual only)")]
+    public Renderer[] scarfRenderers;
+    public Renderer[] hoodRenderers;
+    public TrailRenderer trail;
     public float baseScale = 1f;
 
     PlayerController pc;
@@ -25,18 +29,47 @@ public class PlayerVisual : MonoBehaviour
         block = new MaterialPropertyBlock();
         baseColors = new Color[renderers.Length];
         for (int i = 0; i < renderers.Length; i++) baseColors[i] = renderers[i].sharedMaterial.GetColor(BaseColorId);
+        ApplyCosmetics();
+    }
+
+    /// <summary>Applies the equipped cosmetics. Colours and the trail only: no gameplay value is touched.</summary>
+    public void ApplyCosmetics()
+    {
+        SetGroupColor(scarfRenderers, CosmeticManager.Equipped(CosmeticCategory.Scarf).Color);
+        SetGroupColor(hoodRenderers, CosmeticManager.Equipped(CosmeticCategory.Hood).Color);
+        var t = CosmeticManager.Equipped(CosmeticCategory.Trail);
+        if (trail != null)
+        {
+            bool on = t.Color.a > 0f;
+            trail.emitting = on && !dead;
+            if (on) { trail.startColor = t.Color; trail.endColor = new Color(t.Color.r, t.Color.g, t.Color.b, 0f); }
+            else trail.Clear();
+        }
+        ApplyTint(hitTimer > 0f ? 0.5f : 0f);
+    }
+
+    void SetGroupColor(Renderer[] group, Color color)
+    {
+        if (group == null) return;
+        foreach (var g in group)
+        {
+            int idx = System.Array.IndexOf(renderers, g);
+            if (idx >= 0) baseColors[idx] = color;
+        }
     }
 
     void OnEnable()
     {
         pc.Landed += OnLanded;
         health.Damaged += OnDamaged;
+        CosmeticManager.Changed += ApplyCosmetics;
     }
 
     void OnDisable()
     {
         if (pc != null) pc.Landed -= OnLanded;
         if (health != null) health.Damaged -= OnDamaged;
+        CosmeticManager.Changed -= ApplyCosmetics;
     }
 
     void OnLanded(float impact)
@@ -51,14 +84,15 @@ public class PlayerVisual : MonoBehaviour
     }
     void OnDamaged(string source) { hitTimer = 0.6f; }
 
-    public void PlayDeath() { dead = true; deathT = 0f; }
+    public void PlayDeath() { dead = true; deathT = 0f; if (trail != null) trail.emitting = false; }
 
     public void ResetVisual()
     {
         dead = false; deathT = 0f; hitTimer = 0f; landSquash = 0f; roll = 0f;
+        if (trail != null) trail.Clear();
         transform.localPosition = Vector3.zero;
         transform.localScale = Vector3.one * baseScale;
-        ApplyTint(0f);
+        ApplyCosmetics();
     }
 
     void LateUpdate()
@@ -127,7 +161,6 @@ public class PlayerVisual : MonoBehaviour
         tinted = amount > 0f;
         for (int i = 0; i < renderers.Length; i++)
         {
-            if (!tinted) { renderers[i].SetPropertyBlock(null); continue; }
             block.SetColor(BaseColorId, Color.Lerp(baseColors[i], new Color(1f, 0.15f, 0.2f), amount));
             renderers[i].SetPropertyBlock(block);
         }

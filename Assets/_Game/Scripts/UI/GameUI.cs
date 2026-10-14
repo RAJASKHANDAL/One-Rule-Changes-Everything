@@ -17,6 +17,8 @@ public class GameUI : MonoBehaviour
     GameOverUI gameOver;
     SettingsPanel settings;
     HowToPlayPanel howTo;
+    CosmeticsPanel cosmetics;
+    MutationAnnouncementUI mutationBanner;
     Coroutine gameOverRoutine;
 
     void Awake()
@@ -43,14 +45,17 @@ public class GameUI : MonoBehaviour
         var root = (RectTransform)canvasGo.transform;
         hud = GameplayHUD.Create(root);
         RuleAnnouncementUI.Create(hud.transform);
+        mutationBanner = MutationAnnouncementUI.Create(hud.transform, gm.mutations);
         settings = SettingsPanel.Create(root);
         howTo = HowToPlayPanel.Create(root);
+        cosmetics = CosmeticsPanel.Create(root);
         // modals must render above the screens that open them, so build screens first and re-order
-        mainMenu = MainMenuUI.Create(root, settings, howTo);
+        mainMenu = MainMenuUI.Create(root, settings, howTo, cosmetics);
         pauseMenu = PauseMenuUI.Create(root, settings);
-        gameOver = GameOverUI.Create(root);
+        gameOver = GameOverUI.Create(root, cosmetics);
         settings.transform.SetAsLastSibling();
         howTo.transform.SetAsLastSibling();
+        cosmetics.transform.SetAsLastSibling();
     }
 
     void OnEnable()
@@ -72,6 +77,7 @@ public class GameUI : MonoBehaviour
         {
             if (settings.IsOpen) settings.Close();
             else if (howTo.IsOpen) howTo.Close();
+            else if (cosmetics.IsOpen) cosmetics.Close();
         }
     }
 
@@ -82,6 +88,7 @@ public class GameUI : MonoBehaviour
         if (gameOverRoutine != null) { StopCoroutine(gameOverRoutine); gameOverRoutine = null; }
         settings.Close();
         howTo.Close();
+        cosmetics.Close();
 
         hud.Show(state == GameState.Playing || state == GameState.Paused);
         mainMenu.Show(state == GameState.MainMenu);

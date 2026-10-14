@@ -19,10 +19,9 @@ MonoBehaviour:
   glyph: ^v
   accent: {r: 0.25, g: 0.88, b: 1, a: 1}
   duration: 18
-  warningDuration: 2.5
+  warningDuration: 3
   difficulty: 3
   minSurvivalTime: 55
   cooldown: 40
   incompatibleWith:
   - floor_is_lava
-  - keep_jumping

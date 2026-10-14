@@ -19,7 +19,7 @@ MonoBehaviour:
   glyph: X
   accent: {r: 1, g: 0.25, b: 0.3, a: 1}
   duration: 16
-  warningDuration: 2.5
+  warningDuration: 3
   difficulty: 1
   minSurvivalTime: 0
   cooldown: 30

@@ -165,7 +165,8 @@ public class AutoTester : MonoBehaviour
         yield return new WaitForSeconds(0.3f);
         gm.rules.DebugStart("gravity_flip");
         yield return new WaitForSeconds(2.8f);
-        Check("gravity flip runs solo (lava/jumping/reversed blocked)", !gm.rules.DebugStart("floor_is_lava") && !gm.rules.DebugStart("keep_jumping") && !gm.rules.DebugStart("controls_reversed"));
+        Check("gravity flip blocks lava and reversed controls", !gm.rules.DebugStart("floor_is_lava") && !gm.rules.DebugStart("controls_reversed"));
+        Check("gravity flip + keep jumping allowed", gm.rules.DebugStart("keep_jumping"));
         gm.GoToMainMenu(); gm.StartRun();
         yield return new WaitForSeconds(0.3f);
         gm.rules.DebugStart("never_stop");
@@ -194,6 +195,62 @@ public class AutoTester : MonoBehaviour
         yield return new WaitForSeconds(0.3f);
         Check("restart resets intensity", gm.intensity.Value < i1 && gm.intensity.Peak < 0.15f, gm.intensity.Value.ToString("F3"));
         Check("curve: 90s is around 0.85", Mathf.Abs(gm.intensity.Evaluate(90f) - 0.85f) < 0.02f && Mathf.Abs(gm.intensity.Evaluate(15f) - 0.2f) < 0.02f);
+
+        // ---- RULE MUTATION: trigger exactly at 150s of current-run survival time
+        var mm = gm.mutations;
+        gm.GoToMainMenu(); gm.StartRun();
+        yield return new WaitForSeconds(0.3f);
+        Check("fresh run is NORMAL_SURVIVAL", mm.Phase == MutationPhase.NormalSurvival && !mm.RealityBreakTriggered);
+        gm.DebugSetSurvivalTime(148.6f);
+        gm.Pause();
+        yield return new WaitForSecondsRealtime(1f);
+        float pausedTime = gm.SurvivalTime;
+        yield return new WaitForSecondsRealtime(0.5f);
+        Check("paused: survival time frozen, no mutation", Mathf.Approximately(pausedTime, gm.SurvivalTime) && mm.Phase == MutationPhase.NormalSurvival);
+        gm.Resume();
+        yield return new WaitForSeconds(0.5f); // ~149.1s
+        Check("149s: mutations not active", gm.SurvivalTime < 150f && mm.Phase == MutationPhase.NormalSurvival && mm.ActiveMutation == null);
+        float mDeadline = Time.time + 3f;
+        while (!mm.RealityBreakTriggered && Time.time < mDeadline) yield return null;
+        Check("150s: Reality Break begins", mm.RealityBreakTriggered && gm.SurvivalTime >= 150f && mm.Phase != MutationPhase.NormalSurvival, "t=" + gm.SurvivalTime.ToString("F2"));
+        float tAtBreak = gm.SurvivalTime;
+        yield return Shot("10_realitybreak");
+        mDeadline = Time.time + 25f;
+        while (mm.Phase == MutationPhase.RealityBreakWarning && Time.time < mDeadline) yield return null;
+        Check("Reality Break completes, phase RULE_MUTATION", mm.Phase != MutationPhase.RealityBreakWarning && mm.Phase != MutationPhase.NormalSurvival);
+        Check("survival timer not reset by the transition", gm.SurvivalTime >= tAtBreak);
+        Check("normal rule scheduling resumed", !gm.rules.SchedulingPaused);
+
+        foreach (var mid in new[] { MutationId.ShiftingBlue, MutationId.ChargingEnergy, MutationId.CursedCoins, MutationId.LandingShockwave })
+        {
+            mm.AbortAll();
+            gm.rules.ResetAll();
+            yield return new WaitForSeconds(0.3f);
+            bool queued = mm.DebugStartMutation(mid);
+            Check(mid + ": warning starts", queued);
+            if (!queued) continue;
+            yield return Shot("11_warn_" + mid);
+            mDeadline = Time.time + 8f;
+            while (mm.ActiveMutation == null && Time.time < mDeadline) yield return null;
+            Check(mid + ": activates after its warning", mm.ActiveMutation != null && mm.ActiveMutation.id == mid);
+            if (mm.ActiveMutation != null && !string.IsNullOrEmpty(mm.ActiveMutation.baseRuleId))
+                Check(mid + ": base rule still active", gm.rules.IsRuleActive(mm.ActiveMutation.baseRuleId));
+            yield return new WaitForSeconds(1.5f);
+            yield return Shot("12_active_" + mid);
+            mm.AbortAll();
+            Check(mid + ": cleans up", mm.ActiveMutation == null || !mm.ActiveMutation.IsActive);
+        }
+        // restart: back to a fresh normal run with a fresh threshold
+        gm.StartRun();
+        yield return new WaitForSeconds(0.3f);
+        Check("restart: NORMAL_SURVIVAL, flag cleared, timer fresh", mm.Phase == MutationPhase.NormalSurvival && !mm.RealityBreakTriggered && gm.SurvivalTime < 2f);
+        // death before 150s never starts the mutation phase
+        gm.health.TakeDamage(1, "test"); yield return new WaitForSeconds(1.1f);
+        gm.health.TakeDamage(1, "test"); yield return new WaitForSeconds(1.1f);
+        gm.health.TakeDamage(1, "test"); yield return new WaitForSeconds(0.3f);
+        Check("game over before 150s: mutation phase never started", gm.State == GameState.GameOver && !mm.RealityBreakTriggered);
+        gm.StartRun();
+        yield return new WaitForSeconds(0.3f);
 
         // game over, stats, retry
         gm.GoToMainMenu(); gm.StartRun();

@@ -19,9 +19,8 @@ MonoBehaviour:
   glyph: ^
   accent: {r: 0.4, g: 0.68, b: 1, a: 1}
   duration: 14
-  warningDuration: 2.5
+  warningDuration: 3
   difficulty: 2
   minSurvivalTime: 30
   cooldown: 30
-  incompatibleWith:
-  - gravity_flip
+  incompatibleWith: []

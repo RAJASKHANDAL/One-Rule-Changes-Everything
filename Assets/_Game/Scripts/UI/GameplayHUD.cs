@@ -1,11 +1,13 @@
 using System.Text;
+using UnityEngine.InputSystem;
 using UnityEngine;
 using UnityEngine.UI;
 
 /// <summary>In-game HUD: health, survival time / score / coins, active rules panel, status line and damage flash.</summary>
 public class GameplayHUD : MonoBehaviour
 {
-    const int RowCount = 4;
+    const int RuleRows = 4;
+    const int RowCount = 5; // the last row shows the active mutation
 
     class RuleRow
     {
@@ -27,6 +29,17 @@ public class GameplayHUD : MonoBehaviour
     float flashAlpha;
     int lastHealth = -1;
     float heartPunch;
+    Text intensityLabel, comboTitle, comboSub, debugText;
+    MutationBase shownMutation;
+    float mutationTotal;
+    Image energyFill;
+    Text energyLabel;
+    GameObject energyRoot;
+    Image comboBar;
+    GameObject comboRoot;
+    CanvasGroup distractionGroup;
+    readonly Text[] missionRows = new Text[3];
+    bool lastLow, debugOn;
     Image lowEdge, intensityFill;
     float shownIntensity;
     const int BonusLineCount = 3;
@@ -62,6 +75,12 @@ public class GameplayHUD : MonoBehaviour
         BuildHealth(root);
         BuildIntensity(root);
         BuildBonusFeed(root);
+        BuildMissions(root);
+        BuildCombo(root);
+        BuildEnergyMeter(root);
+        debugText = UIKit.Label(root, "Debug", "", 16, UIKit.Lavender, TextAnchor.MiddleCenter, FontStyle.Normal);
+        UIKit.Place(debugText.rectTransform, new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(0f, 8f), new Vector2(1400f, 24f));
+        debugText.gameObject.SetActive(false);
         BuildTopBar(root);
         BuildRulesPanel(root);
 
@@ -78,7 +97,9 @@ public class GameplayHUD : MonoBehaviour
         var inner = UIKit.Panel(root, "Intensity", UIKit.Navy, UIKit.Border, out var outer, 10f, 2f);
         UIKit.Place(outer.rectTransform, new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(28f, -128f), new Vector2(60f + 72f * health.maxHealth, 46f));
         var label = UIKit.Label(inner.transform, "Label", "INTENSITY", 16, UIKit.Cyan, TextAnchor.MiddleLeft);
-        UIKit.Place(label.rectTransform, new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(14f, -4f), new Vector2(200f, 18f));
+        intensityLabel = label;
+        distractionGroup = outer.gameObject.AddComponent<CanvasGroup>();
+        UIKit.Place(label.rectTransform, new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(14f, -4f), new Vector2(240f, 18f));
         var barBg = UIKit.Img(inner.transform, "BarBg", UIKit.White, new Color(0f, 0f, 0.1f, 0.7f));
         barBg.rectTransform.anchorMin = Vector2.zero; barBg.rectTransform.anchorMax = new Vector2(1f, 0f);
         barBg.rectTransform.offsetMin = new Vector2(14f, 7f); barBg.rectTransform.offsetMax = new Vector2(-14f, 15f);
@@ -97,6 +118,90 @@ public class GameplayHUD : MonoBehaviour
             bonusLines[i] = t;
             bonusAge[i] = 99f;
         }
+    }
+
+    void BuildMissions(RectTransform root)
+    {
+        var inner = UIKit.Panel(root, "Missions", UIKit.Navy, UIKit.Border, out var outer, 12f, 2f);
+        UIKit.Place(outer.rectTransform, new Vector2(0f, 0f), new Vector2(0f, 0f), new Vector2(28f, 28f), new Vector2(390f, 138f));
+        var header = UIKit.Label(inner.transform, "Header", "MISSIONS", 16, UIKit.Cyan, TextAnchor.MiddleLeft);
+        UIKit.Place(header.rectTransform, new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(14f, -6f), new Vector2(200f, 20f));
+        for (int i = 0; i < missionRows.Length; i++)
+        {
+            missionRows[i] = UIKit.Label(inner.transform, "Mission" + i, "", 20, Color.white, TextAnchor.MiddleLeft, FontStyle.Bold);
+            UIKit.Place(missionRows[i].rectTransform, new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(14f, -30f - i * 34f), new Vector2(364f, 30f));
+        }
+    }
+
+    void BuildCombo(RectTransform root)
+    {
+        var inner = UIKit.Panel(root, "Combo", UIKit.Navy, new Color(1f, 0.7f, 0.2f, 0.9f), out var outer, 12f, 2f);
+        UIKit.Place(outer.rectTransform, new Vector2(1f, 0f), new Vector2(1f, 0f), new Vector2(-28f, 28f), new Vector2(330f, 82f));
+        comboRoot = outer.gameObject;
+        comboTitle = UIKit.Label(inner.transform, "Title", "", 28, UIKit.Gold, TextAnchor.MiddleLeft, FontStyle.Bold, true);
+        UIKit.Place(comboTitle.rectTransform, new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(14f, -6f), new Vector2(300f, 34f));
+        comboSub = UIKit.Label(inner.transform, "Sub", "", 18, UIKit.Lavender, TextAnchor.MiddleLeft, FontStyle.Normal);
+        UIKit.Place(comboSub.rectTransform, new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(14f, -40f), new Vector2(300f, 22f));
+        var barBg = UIKit.Img(inner.transform, "BarBg", UIKit.White, new Color(0f, 0f, 0.1f, 0.7f));
+        barBg.rectTransform.anchorMin = Vector2.zero; barBg.rectTransform.anchorMax = new Vector2(1f, 0f);
+        barBg.rectTransform.offsetMin = new Vector2(14f, 6f); barBg.rectTransform.offsetMax = new Vector2(-14f, 12f);
+        comboBar = UIKit.Img(barBg.transform, "Bar", UIKit.White, UIKit.Gold);
+        UIKit.Stretch(comboBar.rectTransform);
+        comboBar.type = Image.Type.Filled; comboBar.fillMethod = Image.FillMethod.Horizontal;
+        comboRoot.SetActive(false);
+    }
+
+    void BuildEnergyMeter(RectTransform root)
+    {
+        var inner = UIKit.Panel(root, "EnergyMeter", UIKit.Navy, new Color(0.85f, 0.3f, 1f), out var outer, 12f, 2f);
+        UIKit.Place(outer.rectTransform, new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(0f, 34f), new Vector2(420f, 58f));
+        energyRoot = outer.gameObject;
+        energyLabel = UIKit.Label(inner.transform, "Label", "ENERGY", 16, new Color(0.85f, 0.5f, 1f), TextAnchor.MiddleLeft);
+        UIKit.Place(energyLabel.rectTransform, new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(14f, -4f), new Vector2(300f, 20f));
+        var barBg = UIKit.Img(inner.transform, "BarBg", UIKit.White, new Color(0f, 0f, 0.1f, 0.7f));
+        barBg.rectTransform.anchorMin = Vector2.zero; barBg.rectTransform.anchorMax = new Vector2(1f, 0f);
+        barBg.rectTransform.offsetMin = new Vector2(14f, 8f); barBg.rectTransform.offsetMax = new Vector2(-14f, 24f);
+        energyFill = UIKit.Img(barBg.transform, "Fill", UIKit.White, new Color(0.85f, 0.3f, 1f));
+        UIKit.Stretch(energyFill.rectTransform);
+        energyFill.type = Image.Type.Filled; energyFill.fillMethod = Image.FillMethod.Horizontal;
+        energyRoot.SetActive(false);
+    }
+
+    void UpdateEnergy()
+    {
+        var charging = gm.mutations != null ? gm.mutations.ActiveMutation as ChargingEnergyMutation : null;
+        bool show = charging != null && charging.MeterVisible;
+        if (energyRoot.activeSelf != show) energyRoot.SetActive(show);
+        if (!show) return;
+        float c = charging.Charge01;
+        energyFill.fillAmount = c;
+        bool danger = c >= 0.7f || charging.Telegraphing;
+        float flash = danger ? 0.5f + 0.5f * Mathf.Sin(Time.unscaledTime * (charging.Telegraphing ? 22f : 10f)) : 0f;
+        energyFill.color = Color.Lerp(Color.Lerp(new Color(0.55f, 0.35f, 1f), new Color(1f, 0.3f, 0.7f), c), UIKit.Red, flash);
+        energyLabel.text = charging.Telegraphing ? "BURST INCOMING - MOVE!" : danger ? "ENERGY CRITICAL" : "ENERGY";
+    }
+
+    void RefreshMissions()
+    {
+        var list = gm.missions != null ? gm.missions.Missions : null;
+        for (int i = 0; i < missionRows.Length; i++)
+        {
+            if (missionRows[i] == null) continue; // e.g. after a script reload while playing
+            if (list == null || i >= list.Count) { missionRows[i].text = ""; continue; }
+            var m = list[i];
+            missionRows[i].text = m.Completed
+                ? "<color=#" + UIKit.Hex(UIKit.Gold) + ">DONE  " + m.Description + "</color>"
+                : m.Description + "  <color=#" + UIKit.Hex(UIKit.Cyan) + ">" + m.Progress + "/" + m.Target + "</color>";
+        }
+    }
+
+    void RefreshCombo(int count, int multiplier)
+    {
+        if (comboRoot == null) return;
+        comboRoot.SetActive(count >= 2);
+        if (count < 2) return;
+        comboTitle.text = "COIN COMBO x" + count;
+        comboSub.text = "MULTIPLIER x" + multiplier;
     }
 
     void OnBonus(string label, int points)
@@ -205,9 +310,11 @@ public class GameplayHUD : MonoBehaviour
         UIKit.Stretch(row.Glyph.rectTransform);
 
         row.Name = UIKit.Label(bg.transform, "Name", "RULE", 24, Color.white, TextAnchor.MiddleLeft);
-        UIKit.Place(row.Name.rectTransform, new Vector2(0f, 0.5f), new Vector2(0f, 0.5f), new Vector2(70f, 5f), new Vector2(220f, 34f));
+        UIKit.Place(row.Name.rectTransform, new Vector2(0f, 0.5f), new Vector2(0f, 0.5f), new Vector2(70f, 5f), new Vector2(190f, 34f));
+        UIKit.Fit(row.Name, 14, 24);
         row.Time = UIKit.Label(bg.transform, "Time", "0s", 26, UIKit.Lavender, TextAnchor.MiddleRight);
-        UIKit.Place(row.Time.rectTransform, new Vector2(1f, 0.5f), new Vector2(1f, 0.5f), new Vector2(-14f, 5f), new Vector2(80f, 34f));
+        UIKit.Place(row.Time.rectTransform, new Vector2(1f, 0.5f), new Vector2(1f, 0.5f), new Vector2(-14f, 5f), new Vector2(66f, 34f));
+        UIKit.Fit(row.Time, 14, 26);
 
         var barBg = UIKit.Img(bg.transform, "BarBg", UIKit.White, new Color(0f, 0f, 0.1f, 0.6f));
         UIKit.Place(barBg.rectTransform, new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(0f, 6f), new Vector2(-28f, 5f));
@@ -225,7 +332,14 @@ public class GameplayHUD : MonoBehaviour
     {
         if (health != null) { health.HealthChanged += OnHealthChanged; health.Damaged += OnDamaged; OnHealthChanged(health.Current, health.maxHealth); }
         StatusBus.Changed += RefreshStatus;
-        if (gm != null) { gm.BonusAwarded += OnBonus; gm.RunReset += ClearTransient; }
+        if (gm != null)
+        {
+            gm.BonusAwarded += OnBonus; gm.RunReset += ClearTransient;
+            if (gm.missions != null) gm.missions.Changed += RefreshMissions;
+            if (gm.combo != null) gm.combo.Changed += RefreshCombo;
+            RefreshMissions();
+            if (gm.combo != null) RefreshCombo(gm.combo.Count, gm.combo.Multiplier);
+        }
         RefreshStatus();
     }
 
@@ -233,7 +347,12 @@ public class GameplayHUD : MonoBehaviour
     {
         if (health != null) { health.HealthChanged -= OnHealthChanged; health.Damaged -= OnDamaged; }
         StatusBus.Changed -= RefreshStatus;
-        if (gm != null) { gm.BonusAwarded -= OnBonus; gm.RunReset -= ClearTransient; }
+        if (gm != null)
+        {
+            gm.BonusAwarded -= OnBonus; gm.RunReset -= ClearTransient;
+            if (gm.missions != null) gm.missions.Changed -= RefreshMissions;
+            if (gm.combo != null) gm.combo.Changed -= RefreshCombo;
+        }
     }
 
     void OnHealthChanged(int current, int max)
@@ -273,6 +392,11 @@ public class GameplayHUD : MonoBehaviour
             flashAlpha = Mathf.MoveTowards(flashAlpha, 0f, udt * 1.6f);
             flash.color = new Color(1f, 0.1f, 0.15f, flashAlpha);
         }
+        var kb = Keyboard.current;
+        if (kb != null && kb.f3Key.wasPressedThisFrame) { debugOn = !debugOn; debugText.gameObject.SetActive(debugOn); }
+        if (debugOn) UpdateDebug();
+        if (gm.combo != null && comboRoot.activeSelf) comboBar.fillAmount = gm.combo.TimeLeft01;
+        UpdateEnergy();
         UpdateHearts(udt);
         UpdateIntensity(udt);
         UpdateBonusFeed(udt);
@@ -297,6 +421,11 @@ public class GameplayHUD : MonoBehaviour
             if (heartPunch > 0f && i == Mathf.Max(0, lastHealth)) s *= 1f + heartPunch * 0.35f;
             if (low && i == 0) s *= pulse;
             hearts[i].rectTransform.localScale = Vector3.one * s;
+        }
+        if (low != lastLow)
+        {
+            lastLow = low;
+            intensityLabel.text = low ? "LAST HEART  -  CLUTCH x" + gm.clutchScoreMultiplier.ToString("0.##") : "INTENSITY";
         }
         // restrained red edge glow while on the last heart (never covers the centre)
         float target = low ? 0.16f + 0.1f * (0.5f + 0.5f * Mathf.Sin(Time.unscaledTime * 5f)) : 0f;
@@ -327,10 +456,17 @@ public class GameplayHUD : MonoBehaviour
         }
     }
 
+    void UpdateDebug()
+    {
+        var im = gm.intensity;
+        debugText.text = "[F3] intensity " + im.Value.ToString("0.00") + "  phase " + im.Phase + "  t " + gm.SurvivalTime.ToString("0.0") +
+                         "s  rules " + gm.rules.ActiveCount + "/" + gm.rules.SlotCount + "  next rule in " + Mathf.Max(0f, gm.rules.NextRuleAt - gm.SurvivalTime).ToString("0.0") + "s";
+    }
+
     void UpdateRules()
     {
         int shown = 0;
-        for (int i = 0; i < rules.SlotCount && shown < RowCount; i++)
+        for (int i = 0; i < rules.SlotCount && shown < RuleRows; i++)
         {
             if (!rules.TryGetSlot(i, out var rule, out bool active, out float remaining, out float total) || !active) continue;
             var row = rows[shown++];
@@ -348,7 +484,33 @@ public class GameplayHUD : MonoBehaviour
             if (secs != row.LastSeconds) { row.LastSeconds = secs; row.Time.text = secs + "s"; }
             row.Bar.fillAmount = total > 0f ? Mathf.Clamp01(remaining / total) : 0f;
         }
-        for (int i = shown; i < RowCount; i++) if (rows[i].Root.activeSelf) rows[i].Root.SetActive(false);
-        rulesPanel.SetActive(shown > 0);
+        bool pending = false;
+        for (int i = 0; i < rules.SlotCount; i++)
+            if (rules.TryGetSlot(i, out _, out bool act, out _, out _) && !act) { pending = true; break; }
+        if (distractionGroup != null) distractionGroup.alpha = Mathf.MoveTowards(distractionGroup.alpha, pending ? 0.3f : 1f, Time.unscaledDeltaTime * 4f);
+        if (gm.mutations != null && gm.mutations.BannerVisible) pending = true; // Reality Break / mutation banner: keep the screen calm
+        for (int i = shown; i < RuleRows; i++) if (rows[i].Root.activeSelf) rows[i].Root.SetActive(false);
+
+        // mutation row: shows which rule is currently mutated and for how long
+        var mut = gm.mutations != null ? gm.mutations.ActiveMutation : null;
+        var mrow = rows[RuleRows];
+        bool showMut = mut != null && mut.IsActive;
+        if (showMut)
+        {
+            if (!mrow.Root.activeSelf || shownMutation != mut)
+            {
+                shownMutation = mut; mutationTotal = Mathf.Max(0.1f, mut.Remaining);
+                mrow.Root.SetActive(true);
+                mrow.Name.text = "MUTATED: " + mut.displayName;
+                mrow.Glyph.text = "M";
+                mrow.Stripe.color = mrow.Badge.color = mrow.Bar.color = mut.accent;
+                mrow.LastSeconds = -1;
+            }
+            int msecs = Mathf.CeilToInt(mut.Remaining);
+            if (msecs != mrow.LastSeconds) { mrow.LastSeconds = msecs; mrow.Time.text = msecs + "s"; }
+            mrow.Bar.fillAmount = Mathf.Clamp01(mut.Remaining / mutationTotal);
+        }
+        else if (mrow.Root.activeSelf) { mrow.Root.SetActive(false); shownMutation = null; }
+        rulesPanel.SetActive(shown > 0 || showMut);
     }
 }

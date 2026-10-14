@@ -24,6 +24,7 @@ public static class GameBuilder
     static readonly Vector2[] RedTilePos = { new Vector2(3.5f, -1.5f), new Vector2(-4, 2.5f), new Vector2(-1, -4.5f), new Vector2(9.5f, 6.5f), new Vector2(-10, -6.5f), new Vector2(0.5f, 9.5f), new Vector2(5.5f, -10), new Vector2(11, 1.5f) };
     static readonly Vector2[] PlateauPos = { new Vector2(10.5f, -10), new Vector2(-8.5f, 10.5f), new Vector2(-11, -1.5f) };
     static readonly Vector2[] FloorCoins = { new Vector2(-2.5f, -2.5f), new Vector2(5.2f, -3.9f), new Vector2(4.8f, 5.6f), new Vector2(9, 4), new Vector2(-4.5f, -5.5f), new Vector2(-8, 0), new Vector2(-6.5f, 6.5f), new Vector2(1, 6.8f), new Vector2(-1, 12), new Vector2(8, -7.5f), new Vector2(0, -8.5f), new Vector2(5.5f, -1) };
+    static readonly Vector2[] PhasePos = { new Vector2(-12.2f, 5.8f), new Vector2(12.3f, -1.1f), new Vector2(-3.2f, -8.4f), new Vector2(-12.4f, -9.2f) };
     static readonly Vector2 SpirePos = new Vector2(10, 10);
     static readonly Vector2 PillarPos = new Vector2(-8.5f, -12.5f);
     static readonly Vector2 Bridge1 = new Vector2(3.5f, 12);
@@ -126,6 +127,8 @@ public static class GameBuilder
         ceil.EnableKeyword("_SURFACE_TYPE_TRANSPARENT");
         ceil.renderQueue = (int)RenderQueue.Transparent;
         Mat("CoinSpark", C(1f, 0.85f, 0.3f), 0f, 0f, null, "Universal Render Pipeline/Particles/Unlit");
+        Mat("RiskCoin", C(1f, 0.5f, 0.3f), 0.7f, 0.5f, C(1.3f, 0.4f, 0.2f));
+        Mat("MutationGlow", C(0.75f, 0.25f, 1f), 0.3f, 0f, C(1.3f, 0.35f, 1.6f));
         Mat("DustSpark", C(0.85f, 0.8f, 1f, 0.8f), 0f, 0f, null, "Universal Render Pipeline/Particles/Unlit");
         Mat("PlayerPack", C(0.16f, 0.12f, 0.3f), 0.15f);
     }
@@ -204,7 +207,7 @@ public static class GameBuilder
         Save(MeshObject("Grass_Patch", SaveMesh(MeshFactory.Grass("Grass_Patch", 4, 9)), M["CyanGrass"], false), "Grass_Patch");
 
         BuildLadder(); BuildBarrier(); BuildBridge();
-        BuildPlatform(); BuildTiles(); BuildCoin(); BuildPlayer();
+        BuildShockwaveRing(); BuildPlatform(); BuildPhasePlatform(); BuildSweeper(); BuildTiles(); BuildCoin(); BuildPlayer();
     }
 
     static void BuildLadder()
@@ -279,6 +282,45 @@ public static class GameBuilder
         var box = root.AddComponent<BoxCollider>();
         box.center = new Vector3(0f, 0.35f, 0f); box.size = new Vector3(3f, 0.7f, 3f);
         Save(root, "SafePlatform");
+    }
+
+    static void BuildShockwaveRing()
+    {
+        var ring = MeshObject("ShockwaveRing", SaveMesh(MeshFactory.Ring("ShockwaveRing", 0.86f, 1f, 48)), M["MutationGlow"], false);
+        ring.GetComponent<MeshRenderer>().shadowCastingMode = ShadowCastingMode.Off;
+        Save(ring, "ShockwaveRing");
+    }
+
+    static void BuildPhasePlatform()
+    {
+        var root = new GameObject("PhasePlatform");
+        var visual = new GameObject("Visual").transform;
+        visual.SetParent(root.transform, false);
+        Prim(visual, "Base", PrimitiveType.Cube, new Vector3(0f, 0.25f, 0f), new Vector3(2.4f, 0.5f, 2.4f), M["PlatformBase"]);
+        Prim(visual, "Chamfer", PrimitiveType.Cube, new Vector3(0f, 0.56f, 0f), new Vector3(2.28f, 0.12f, 2.28f), M["LightRock"]);
+        var top = Prim(visual, "Top", PrimitiveType.Cube, new Vector3(0f, 0.68f, 0f), new Vector3(2.12f, 0.06f, 2.12f), M["SafeTile"]);
+        foreach (float x in new[] { -1.05f, 1.05f })
+            foreach (float z in new[] { -1.05f, 1.05f })
+                Prim(visual, "Marker", PrimitiveType.Cube, new Vector3(x, 0.8f, z), new Vector3(0.2f, 0.22f, 0.2f), M["OrangeWood"]); // orange corners = this platform can vanish
+        var box = root.AddComponent<BoxCollider>();
+        box.center = new Vector3(0f, 0.35f, 0f); box.size = new Vector3(2.4f, 0.7f, 2.4f);
+        var tile = root.AddComponent<PlatformTile>();
+        tile.solid = box; tile.visual = visual; tile.topRenderer = top.GetComponent<Renderer>();
+        tile.safeMaterial = M["SafeTile"]; tile.warningMaterial = M["HazardWarning"];
+        Save(root, "PhasePlatform");
+    }
+
+    static void BuildSweeper()
+    {
+        var root = new GameObject("SweeperBeam");
+        var rb = root.AddComponent<Rigidbody>();
+        rb.isKinematic = true; rb.useGravity = false;
+        root.AddComponent<MovingObstacle>();
+        Prim(root.transform, "Post", PrimitiveType.Cylinder, new Vector3(0f, 0.45f, 0f), new Vector3(0.7f, 0.45f, 0.7f), M["DarkWood"], true);
+        Prim(root.transform, "Beam", PrimitiveType.Cube, new Vector3(0f, 0.4f, 0f), new Vector3(3.8f, 0.5f, 0.38f), M["OrangeWood"], true);
+        Prim(root.transform, "Cap", PrimitiveType.Cube, new Vector3(1.75f, 0.4f, 0f), new Vector3(0.3f, 0.6f, 0.5f), M["DarkWood"]);
+        Prim(root.transform, "Cap", PrimitiveType.Cube, new Vector3(-1.75f, 0.4f, 0f), new Vector3(0.3f, 0.6f, 0.5f), M["DarkWood"]);
+        Save(root, "SweeperBeam");
     }
 
     static void BuildTiles()
@@ -358,17 +400,17 @@ public static class GameBuilder
         Prim(t, "Buckle", PrimitiveType.Cube, new Vector3(0f, -0.21f, 0.26f), new Vector3(0.1f, 0.09f, 0.04f), M["Gold"]);
         Prim(t, "Pack", PrimitiveType.Cube, new Vector3(0f, -0.04f, -0.3f), new Vector3(0.38f, 0.42f, 0.18f), M["PlayerPack"]);
         Prim(t, "PackStrap", PrimitiveType.Cube, new Vector3(0f, 0.0f, -0.4f), new Vector3(0.4f, 0.07f, 0.05f), M["PlayerOrange"]);
-        Prim(t, "Hood", PrimitiveType.Sphere, new Vector3(0f, 0.43f, -0.03f), new Vector3(0.74f, 0.7f, 0.72f), M["PlayerHood"]);
-        Prim(t, "HoodTip", PrimitiveType.Sphere, new Vector3(0f, 0.68f, -0.26f), new Vector3(0.24f, 0.24f, 0.3f), M["PlayerHood"]);
+        var hoodGo = Prim(t, "Hood", PrimitiveType.Sphere, new Vector3(0f, 0.43f, -0.03f), new Vector3(0.74f, 0.7f, 0.72f), M["PlayerHood"]);
+        var hoodTipGo = Prim(t, "HoodTip", PrimitiveType.Sphere, new Vector3(0f, 0.68f, -0.26f), new Vector3(0.24f, 0.24f, 0.3f), M["PlayerHood"]);
         Prim(t, "Face", PrimitiveType.Sphere, new Vector3(0f, 0.4f, 0.2f), new Vector3(0.5f, 0.44f, 0.32f), M["PlayerSkin"]);
         foreach (float x in new[] { -0.12f, 0.12f })
             Prim(t, "Eye", PrimitiveType.Sphere, new Vector3(x, 0.44f, 0.355f), new Vector3(0.08f, 0.1f, 0.05f), M["PlayerEye"]);
-        Prim(t, "Scarf", PrimitiveType.Cylinder, new Vector3(0f, 0.12f, 0f), new Vector3(0.56f, 0.06f, 0.48f), M["PlayerOrange"]);
-        Prim(t, "ScarfKnot", PrimitiveType.Sphere, new Vector3(0.14f, 0.1f, 0.2f), new Vector3(0.16f, 0.14f, 0.14f), M["PlayerOrange"]);
+        var scarfGo = Prim(t, "Scarf", PrimitiveType.Cylinder, new Vector3(0f, 0.12f, 0f), new Vector3(0.56f, 0.06f, 0.48f), M["PlayerOrange"]);
+        var knotGo = Prim(t, "ScarfKnot", PrimitiveType.Sphere, new Vector3(0.14f, 0.1f, 0.2f), new Vector3(0.16f, 0.14f, 0.14f), M["PlayerOrange"]);
 
         var tail = new GameObject("ScarfTail").transform;
         tail.SetParent(t, false); tail.localPosition = new Vector3(0f, 0.1f, -0.2f);
-        Prim(tail, "Tail", PrimitiveType.Cube, new Vector3(0f, 0f, -0.3f), new Vector3(0.2f, 0.06f, 0.6f), M["PlayerOrange"]);
+        var tailGo = Prim(tail, "Tail", PrimitiveType.Cube, new Vector3(0f, 0f, -0.3f), new Vector3(0.2f, 0.06f, 0.6f), M["PlayerOrange"]);
 
         Transform Limb(string name, float x, float y, Vector3 meshPos, Vector3 meshScale, Material mat, Vector3? tipPos = null, Material tipMat = null, Vector3? tipScale = null)
         {
@@ -406,6 +448,18 @@ public static class GameBuilder
         var rends = new List<Renderer>();
         foreach (var r in vis.GetComponentsInChildren<Renderer>()) if (!(r is ParticleSystemRenderer)) rends.Add(r);
         v.renderers = rends.ToArray();
+        v.scarfRenderers = new[] { scarfGo.GetComponent<Renderer>(), knotGo.GetComponent<Renderer>(), tailGo.GetComponent<Renderer>() };
+        v.hoodRenderers = new[] { hoodGo.GetComponent<Renderer>(), hoodTipGo.GetComponent<Renderer>() };
+
+        var trailGo = new GameObject("Trail");
+        trailGo.transform.SetParent(root.transform, false);
+        trailGo.transform.localPosition = new Vector3(0f, -0.7f, 0f);
+        var trail = trailGo.AddComponent<TrailRenderer>();
+        trail.time = 0.45f; trail.minVertexDistance = 0.12f; trail.emitting = false;
+        trail.widthCurve = new AnimationCurve(new Keyframe(0f, 0.4f), new Keyframe(1f, 0f));
+        trail.sharedMaterial = M["CoinSpark"];
+        trail.shadowCastingMode = ShadowCastingMode.Off;
+        v.trail = trail;
         Save(root, "Player");
     }
 
@@ -429,12 +483,12 @@ public static class GameBuilder
         var orange = C(1f, 0.6f, 0.2f); var blue = C(0.4f, 0.68f, 1f); var violet = C(0.8f, 0.48f, 1f);
         return new Dictionary<string, RuleDefinition>
         {
-            ["never_stop"] = Def("Rule_NeverStop", "never_stop", "NEVER STOP", "KEEP MOVING", "Keep moving. Standing still for too long will hurt you.", ">>", pink, 14f, 2.5f, 1, 0f, 30f),
-            ["red_is_dead"] = Def("Rule_RedIsDead", "red_is_dead", "RED IS DEAD", "AVOID RED ZONES", "Avoid red surfaces.", "X", red, 16f, 2.5f, 1, 0f, 30f),
-            ["gravity_flip"] = Def("Rule_GravityFlip", "gravity_flip", "GRAVITY FLIP", "GRAVITY REVERSES", "Gravity reverses. Adapt quickly.", "^v", cyan, 18f, 2.5f, 3, 55f, 40f, "floor_is_lava", "keep_jumping"),
+            ["never_stop"] = Def("Rule_NeverStop", "never_stop", "NEVER STOP", "KEEP MOVING", "Keep moving. Standing still for too long will hurt you.", ">>", pink, 14f, 3f, 1, 0f, 30f),
+            ["red_is_dead"] = Def("Rule_RedIsDead", "red_is_dead", "RED IS DEAD", "AVOID RED ZONES", "Avoid red surfaces.", "X", red, 16f, 3f, 1, 0f, 30f),
+            ["gravity_flip"] = Def("Rule_GravityFlip", "gravity_flip", "GRAVITY FLIP", "GRAVITY REVERSES", "Gravity reverses. Adapt quickly.", "^v", cyan, 18f, 3f, 3, 55f, 40f, "floor_is_lava"),
             ["floor_is_lava"] = Def("Rule_FloorIsLava", "floor_is_lava", "THE FLOOR IS LAVA", "ONLY SAFE PLATFORMS", "Only safe platforms can protect you.", "~", orange, 16f, 3f, 2, 40f, 35f, "gravity_flip"),
-            ["keep_jumping"] = Def("Rule_KeepJumping", "keep_jumping", "KEEP JUMPING", "DON'T STAY GROUNDED", "Do not remain grounded too long.", "^", blue, 14f, 2.5f, 2, 30f, 30f, "gravity_flip"),
-            ["controls_reversed"] = Def("Rule_ControlsReversed", "controls_reversed", "CONTROLS REVERSED", "MOVEMENT IS FLIPPED", "Movement directions change.", "<>", violet, 14f, 2.5f, 2, 25f, 30f),
+            ["keep_jumping"] = Def("Rule_KeepJumping", "keep_jumping", "KEEP JUMPING", "DON'T STAY GROUNDED", "Do not remain grounded too long.", "^", blue, 14f, 3f, 2, 30f, 30f),
+            ["controls_reversed"] = Def("Rule_ControlsReversed", "controls_reversed", "CONTROLS REVERSED", "MOVEMENT IS FLIPPED", "Movement directions change.", "<>", violet, 14f, 3f, 2, 25f, 30f),
         };
     }
 
@@ -488,6 +542,7 @@ public static class GameBuilder
         foreach (var p in RedTilePos) Keep(p.x, p.y, 2.1f);
         foreach (var p in PlateauPos) Keep(p.x, p.y, 3.2f);
         foreach (var p in FloorCoins) Keep(p.x, p.y, 1.2f);
+        foreach (var p in PhasePos) Keep(p.x, p.y, 2.1f);
         Keep(SpirePos.x, SpirePos.y, 3.2f);
         Keep(PillarPos.x, PillarPos.y, 3f);
         Keep(Bridge1.x, Bridge1.y, 3.4f);
@@ -628,6 +683,7 @@ public static class GameBuilder
                 float sgn = i == 0 ? -1f : 1f;
                 var p2 = pos + side * sgn * Rf(1.9f, 2.6f) * k + inward * Rf(-0.4f, 0.9f);
                 float w2 = Rf(1.8f, 2.8f) * k;
+                if (!Free(p2, 0.3f)) continue;
                 Place(rockPrefabs[rng.Next(3)], new Vector3(p2.x, 0f, p2.y), Rf(0f, 360f), new Vector3(w2, h * Rf(0.4f, 0.8f), w2 * Rf(0.8f, 1.2f)), perimeter, RockMat(), solid).name = "Rock_Flank";
             }
             // stacked cap rock gives the formation a layered silhouette
@@ -647,6 +703,7 @@ public static class GameBuilder
             if (!ring2 && index % 3 == 0)
             {
                 var pl = pos + inward * Rf(2.2f, 2.8f) + side * Rf(-1.2f, 1.2f);
+                if (!Free(pl, 0.3f)) return;
                 Place("Plateau", new Vector3(pl.x, 0f, pl.y), Rf(0f, 360f), new Vector3(0.55f, 0.4f, 0.55f), perimeter, RockMat(), true).name = "Rock_Ledge";
             }
             // crystals tucked against the cluster, decorative only
@@ -677,7 +734,8 @@ public static class GameBuilder
         Place("Crystal_A", new Vector3(PillarPos.x + 1.2f, 0f, PillarPos.y + 1.7f), 0f, Vector3.one * 0.9f, props, null, false);
 
         // ---- platforms (safe from lava) and plateaus
-        foreach (var p in PlatformPos) Place("SafePlatform", new Vector3(p.x, 0f, p.y), 0f, Vector3.one, platforms);
+        var platformInstances = new List<GameObject>();
+        foreach (var p in PlatformPos) platformInstances.Add(Place("SafePlatform", new Vector3(p.x, 0f, p.y), 0f, Vector3.one, platforms));
         for (int i = 0; i < PlateauPos.Length; i++)
         {
             var p = PlateauPos[i];
@@ -687,6 +745,27 @@ public static class GameBuilder
             var dir = (-p).normalized;
             var basePos = p + dir * 2.7f;
             Place("Ladder", new Vector3(basePos.x, 0f, basePos.y), Mathf.Atan2(-dir.x, -dir.y) * Mathf.Rad2Deg, Vector3.one, props);
+        }
+
+        // ---- temporary (disappearing) platforms and the optional sweeping beam
+        var phasePlatforms = new List<PlatformTile>();
+        foreach (var pp in PhasePos)
+        {
+            var go = Place("PhasePlatform", new Vector3(pp.x, 0f, pp.y), 0f, Vector3.one, platforms);
+            phasePlatforms.Add(go.GetComponent<PlatformTile>());
+            Keep(pp.x, pp.y, 1.9f);
+        }
+        var obstacleList = new List<MovingObstacle>();
+        var sweeperGo = Place("SweeperBeam", new Vector3(-3.2f, 0f, 11.8f), 0f, Vector3.one, props);
+        obstacleList.Add(sweeperGo.GetComponent<MovingObstacle>());
+        Keep(-3.2f, 11.8f, 2.4f);
+        Physics.SyncTransforms();
+        foreach (var pt in phasePlatforms)
+        {
+            var hits = Physics.OverlapBox(pt.transform.position + Vector3.up * 1.0f, new Vector3(1.25f, 0.8f, 1.25f), Quaternion.identity, ~0, QueryTriggerInteraction.Ignore);
+            foreach (var h in hits)
+                if (h.GetComponentInParent<PlatformTile>() != pt && h.GetComponent<FloorSurface>() == null && h.name != "Boundary" && h.transform.parent != null && h.transform.parent.name != "Boundary")
+                    Debug.LogWarning("PhasePlatform at " + pt.transform.position + " overlaps " + h.name);
         }
 
         // ---- hazard & safe tiles
@@ -739,11 +818,76 @@ public static class GameBuilder
         // ---- coins
         var coinGroup = Group("Coins");
         var coinList = new List<Coin>();
-        void AddCoin(Vector3 pos) => coinList.Add(Place("Coin", pos, 0f, Vector3.one, coinGroup).GetComponent<Coin>());
+        Coin AddCoin(Vector3 pos)
+        {
+            var c = Place("Coin", pos, 0f, Vector3.one, coinGroup).GetComponent<Coin>();
+            coinList.Add(c);
+            return c;
+        }
+        void MakeRisky(Coin c, int multiplier)
+        {
+            c.valueMultiplier = multiplier;
+            c.transform.localScale = Vector3.one * 1.2f;
+            foreach (var r in c.GetComponentsInChildren<Renderer>()) r.sharedMaterial = M["RiskCoin"];
+        }
         foreach (var p in FloorCoins) AddCoin(new Vector3(p.x, 0.95f, p.y));
         for (int i = 1; i < PlatformPos.Length; i++) AddCoin(new Vector3(PlatformPos[i].x, 1.6f, PlatformPos[i].y));
         foreach (var p in PlateauPos) AddCoin(new Vector3(p.x, 2.05f, p.y));
         AddCoin(new Vector3(Bridge1.x, 1.4f, Bridge1.y));
+        // risky coins: on temporary platforms (x3) and hugging hazard tiles (x2); all are physically reachable
+        foreach (var pt in phasePlatforms) MakeRisky(AddCoin(new Vector3(pt.transform.position.x, 1.6f, pt.transform.position.z)), 3);
+        MakeRisky(AddCoin(new Vector3(3.5f, 0.95f, -3.3f)), 2);
+        MakeRisky(AddCoin(new Vector3(-4f, 0.95f, 0.9f)), 2);
+
+        // ---- shifting-blue movers: a limited subset of the main platforms, each with ONE validated destination
+        var movers = new List<MovingPlatform>();
+        var destinations = new List<Vector3>();
+        bool DestinationFree(GameObject plat, Vector3 dest)
+        {
+            if (Mathf.Abs(dest.x) > 11.5f || Mathf.Abs(dest.z) > 11.5f) return false;
+            foreach (var t in RedTilePos) if (Mathf.Abs(dest.x - t.x) < 2.6f && Mathf.Abs(dest.z - t.y) < 2.6f) return false; // never over a hazard tile
+            foreach (var d in destinations) if (Vector3.Distance(d, dest) < 3.6f) return false;
+            Physics.SyncTransforms();
+            var start = plat.transform.position;
+            for (int step = 1; step <= 4; step++) // check the whole path, not just the end point
+            {
+                var c = Vector3.Lerp(start, dest, step / 4f);
+                foreach (var h in Physics.OverlapBox(c + Vector3.up * 0.9f, new Vector3(1.6f, 0.8f, 1.6f), Quaternion.identity, ~0, QueryTriggerInteraction.Ignore))
+                    if (!h.transform.IsChildOf(plat.transform)) return false;
+            }
+            return true;
+        }
+        for (int pi = 1; pi < platformInstances.Count && movers.Count < 5; pi++) // index 0 is the spawn platform: never moves
+        {
+            var plat = platformInstances[pi];
+            Vector3 chosenOffset = Vector3.zero; bool found = false;
+            foreach (float dist in new[] { 2.8f, 3.4f })
+            {
+                foreach (var dir in new[] { Vector3.right, Vector3.left, Vector3.forward, Vector3.back })
+                {
+                    if (DestinationFree(plat, plat.transform.position + dir * dist)) { chosenOffset = dir * dist; found = true; break; }
+                }
+                if (found) break;
+            }
+            if (!found) continue;
+            var dest = plat.transform.position + chosenOffset;
+            destinations.Add(dest);
+            var rbp = plat.AddComponent<Rigidbody>(); rbp.isKinematic = true; rbp.useGravity = false;
+            var mp = plat.AddComponent<MovingPlatform>();
+            mp.offset = chosenOffset;
+            var marker = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            marker.name = "MoveMarker";
+            marker.transform.SetParent(platforms, false);
+            marker.transform.position = new Vector3(dest.x, 0.045f, dest.z);
+            marker.transform.localScale = new Vector3(3.1f, 0.05f, 3.1f);
+            marker.GetComponent<Renderer>().sharedMaterial = M["MutationGlow"];
+            marker.GetComponent<Renderer>().shadowCastingMode = ShadowCastingMode.Off;
+            Object.DestroyImmediate(marker.GetComponent<Collider>());
+            marker.SetActive(false);
+            mp.destinationMarker = marker;
+            movers.Add(mp);
+        }
+        if (movers.Count < 2) Debug.LogWarning("Only " + movers.Count + " valid moving-platform destinations found.");
 
         // ---- lighting
         var sunGo = new GameObject("Sun");
@@ -872,6 +1016,12 @@ public static class GameBuilder
 
         var intensityMgr = sysGo.AddComponent<IntensityManager>();
         gm.intensity = intensityMgr;
+        gm.combo = sysGo.AddComponent<CoinComboManager>();
+        gm.nearMiss = sysGo.AddComponent<NearMissDetector>();
+        gm.missions = sysGo.AddComponent<MissionManager>();
+        var dynamics = sysGo.AddComponent<ArenaDynamics>();
+        dynamics.temporaryPlatforms = phasePlatforms.ToArray();
+        dynamics.obstacles = obstacleList.ToArray();
 
         var ruleBurstGo = new GameObject("RuleBurst");
         ruleBurstGo.transform.SetParent(sysGo.transform, false);
@@ -889,12 +1039,37 @@ public static class GameBuilder
         visuals.volume = vol;
         visuals.ruleBurst = rb2;
 
+        var mutRoot = new GameObject("Mutations");
+        mutRoot.transform.SetParent(sysGo.transform, false);
+        T AddMutation<T>(MutationId mid, string baseRule, string display, string headline, string desc, float duration, float weight, int tier) where T : MutationBase
+        {
+            var go = new GameObject(typeof(T).Name);
+            go.transform.SetParent(mutRoot.transform, false);
+            var m = go.AddComponent<T>();
+            m.id = mid; m.baseRuleId = baseRule; m.displayName = display; m.headline = headline; m.description = desc;
+            m.duration = duration; m.weight = weight; m.minTier = tier;
+            return m;
+        }
+        var shifting = AddMutation<ShiftingBlueMutation>(MutationId.ShiftingBlue, "red_is_dead", "SHIFTING BLUE", "RED IS DEAD -> SHIFTING BLUE", "BLUE PLATFORMS WILL MOVE", 18f, 1f, 0);
+        shifting.platforms = movers.ToArray();
+        var charging = AddMutation<ChargingEnergyMutation>(MutationId.ChargingEnergy, "never_stop", "CHARGING ENERGY", "NEVER STOP -> CHARGING ENERGY", "STANDING STILL CHARGES A DEADLY BURST", 16f, 1f, 0);
+        var cursed = AddMutation<CursedCoinsMutation>(MutationId.CursedCoins, "", "COINS ARE CURSED", "COINS ARE CURSED", "EACH COIN WARPS A NEARBY TILE INTO DANGER", 18f, 0.9f, 1);
+        var shock = AddMutation<LandingShockwaveMutation>(MutationId.LandingShockwave, "keep_jumping", "LANDING SHOCKWAVE", "KEEP JUMPING -> LANDING SHOCKWAVE", "EVERY LANDING SENDS A RING - JUMP OVER IT", 16f, 1f, 1);
+        shock.ringPrefab = P["ShockwaveRing"];
+        var mutationMgr = sysGo.AddComponent<MutationManager>();
+        mutationMgr.mutations = new MutationBase[] { shifting, charging, cursed, shock };
+        mutationMgr.visuals = visuals;
+        gm.mutations = mutationMgr;
+
         var uiGo = new GameObject("UI");
         uiGo.AddComponent<GameUI>();
 
         // static batching for the environment
         foreach (var t in env.GetComponentsInChildren<Transform>())
             GameObjectUtility.SetStaticEditorFlags(t.gameObject, StaticEditorFlags.BatchingStatic);
+        // moving / scaling platforms cannot be statically batched
+        foreach (var mv in movers) foreach (var t in mv.GetComponentsInChildren<Transform>()) GameObjectUtility.SetStaticEditorFlags(t.gameObject, 0);
+        foreach (var pt in phasePlatforms) foreach (var t in pt.GetComponentsInChildren<Transform>()) GameObjectUtility.SetStaticEditorFlags(t.gameObject, 0);
         // crystals get a per-renderer glow at runtime, so they must not be statically batched
         foreach (var t in env.GetComponentsInChildren<Transform>())
             if (t.name.StartsWith("Crystal")) GameObjectUtility.SetStaticEditorFlags(t.gameObject, 0);

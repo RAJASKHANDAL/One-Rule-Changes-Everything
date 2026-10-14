@@ -1,6 +1,6 @@
 %YAML 1.1
 %TAG !u! tag:unity3d.com,2011:
---- !u!1 &3953761220429921635
+--- !u!1 &8357068938296756792
 GameObject:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -8,9 +8,9 @@ GameObject:
   m_PrefabAsset: {fileID: 0}
   serializedVersion: 6
   m_Component:
-  - component: {fileID: 4065215280430168384}
-  - component: {fileID: 1710337123634932412}
-  - component: {fileID: 3473628160158940311}
+  - component: {fileID: 2267893760333446348}
+  - component: {fileID: 6164067406022253286}
+  - component: {fileID: 9061498881137865680}
   m_Layer: 0
   m_Name: Crystal_B
   m_TagString: Untagged
@@ -18,13 +18,13 @@ GameObject:
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
   m_IsActive: 1
---- !u!4 &4065215280430168384
+--- !u!4 &2267893760333446348
 Transform:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 3953761220429921635}
+  m_GameObject: {fileID: 8357068938296756792}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
   m_LocalPosition: {x: 0, y: 0, z: 0}
@@ -33,21 +33,21 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!33 &1710337123634932412
+--- !u!33 &6164067406022253286
 MeshFilter:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 3953761220429921635}
+  m_GameObject: {fileID: 8357068938296756792}
   m_Mesh: {fileID: 4300000, guid: 5104482c643872d49a23cd3bc98cb204, type: 2}
---- !u!23 &3473628160158940311
+--- !u!23 &9061498881137865680
 MeshRenderer:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 3953761220429921635}
+  m_GameObject: {fileID: 8357068938296756792}
   m_Enabled: 1
   m_CastShadows: 1
   m_ReceiveShadows: 1

@@ -40,7 +40,9 @@ public class CoinSpawner : MonoBehaviour
         if (burst != null)
         {
             burst.transform.position = coin.transform.position;
-            burst.Emit(14);
+            var main = burst.main;
+            main.startColor = CosmeticManager.Equipped(CosmeticCategory.CoinSparks).Color; // cosmetic style only
+            burst.Emit(coin.valueMultiplier > 1 ? 24 : 14);
         }
         coin.gameObject.SetActive(false);
         pending.Add((coin, Time.time + respawnDelay));

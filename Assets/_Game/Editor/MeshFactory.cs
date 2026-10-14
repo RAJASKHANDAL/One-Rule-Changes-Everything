@@ -196,6 +196,24 @@ public static class MeshFactory
         return mb.ToMesh(name);
     }
 
+    // ------------------------------------------------------------------ flat ring (shockwave visual, unit outer radius)
+
+    public static Mesh Ring(string name, float inner, float outer, int segments)
+    {
+        var mb = new MB();
+        var below = new Vector3(0f, -1f, 0f); // triangles are oriented away from this point, i.e. facing up
+        for (int i = 0; i < segments; i++)
+        {
+            float a0 = i / (float)segments * Mathf.PI * 2f, a1 = (i + 1) / (float)segments * Mathf.PI * 2f;
+            var o0 = new Vector3(Mathf.Cos(a0) * outer, 0f, Mathf.Sin(a0) * outer);
+            var o1 = new Vector3(Mathf.Cos(a1) * outer, 0f, Mathf.Sin(a1) * outer);
+            var i0 = new Vector3(Mathf.Cos(a0) * inner, 0f, Mathf.Sin(a0) * inner);
+            var i1 = new Vector3(Mathf.Cos(a1) * inner, 0f, Mathf.Sin(a1) * inner);
+            mb.Quad(i0, o0, o1, i1, below);
+        }
+        return mb.ToMesh(name);
+    }
+
     // ------------------------------------------------------------------ grass
 
     public static Mesh Grass(string name, int seed, int blades)

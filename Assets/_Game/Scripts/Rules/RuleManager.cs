@@ -22,15 +22,18 @@ public class RuleManager : MonoBehaviour
     public int maxConcurrentEarly = 1;
     public int maxConcurrentMid = 2;
     public int maxConcurrentLate = 2;
-    [Range(0f, 1f)] public float comboChanceMid = 0.35f;
-    [Range(0f, 1f)] public float comboChanceLate = 0.75f;
+    [Tooltip("Chance of adding a compatible second rule, indexed by run phase (Learn, FirstChanges, Adaptation, HighPressure, Mastery).")]
+    public float[] comboChanceByPhase = { 0f, 0.25f, 0.4f, 0.65f, 0.8f };
+    [Min(1)] public int maxSimultaneousRules = 2;
     [Tooltip("Pairs (ruleIdA|ruleIdB) that were checked against the implementations and may run together.")]
     public string[] comboPairs =
     {
         "never_stop|red_is_dead",
         "keep_jumping|controls_reversed",
         "red_is_dead|controls_reversed",
-        "floor_is_lava|controls_reversed"
+        "floor_is_lava|controls_reversed",
+        "red_is_dead|keep_jumping",
+        "gravity_flip|keep_jumping"
     };
 
     [Header("Duration scaling")]
@@ -43,6 +46,7 @@ public class RuleManager : MonoBehaviour
         public float WarnRemaining, Remaining, Total;
         public bool Active;
         public int ComboId;
+        public bool Silent;
         public int DamageEventsAtStart;
     }
 
@@ -60,7 +64,12 @@ public class RuleManager : MonoBehaviour
     public event Action<RuleBase, bool> RuleEnded;
     public event Action RulesCleared;
 
+    /// <summary>When true no NEW normal rule is scheduled (used during the Reality Break). Running rules are unaffected.</summary>
+    public bool SchedulingPaused { get; set; }
+    public bool HasPendingWarning => HasPending();
     public int SlotCount => slots.Count;
+    public int ActiveCount { get { int n = 0; foreach (var s in slots) if (s.Active) n++; return n; } }
+    public bool IsRuleQueuedOrActive(string id) { foreach (var s in slots) if (s.Rule.Id == id) return true; return false; }
     public float NextRuleAt => nextRuleAt;
 
     public bool TryGetSlot(int index, out RuleBase rule, out bool active, out float remaining, out float total)
@@ -83,19 +92,14 @@ public class RuleManager : MonoBehaviour
 
     float CurrentIntensity(GameManager gm) => gm.intensity != null ? gm.intensity.Value : 0f;
 
-    int MaxConcurrent(GameManager gm, float i)
-    {
-        var im = gm.intensity;
-        float med = im != null ? im.mediumThreshold : 0.35f, high = im != null ? im.highThreshold : 0.65f;
-        return i < med ? maxConcurrentEarly : i < high ? maxConcurrentMid : maxConcurrentLate;
-    }
+    int PhaseIndex(GameManager gm) => gm.intensity != null ? (int)gm.intensity.Phase - 1 : 0;
+
+    int MaxConcurrent(GameManager gm, float i) => PhaseIndex(gm) == 0 ? 1 : Mathf.Max(1, maxSimultaneousRules);
 
     float ComboChance(GameManager gm, float i)
     {
-        var im = gm.intensity;
-        float med = im != null ? im.mediumThreshold : 0.35f, high = im != null ? im.highThreshold : 0.65f;
-        if (i < med) return 0f;
-        return i < high ? comboChanceMid : comboChanceLate;
+        int p = PhaseIndex(gm);
+        return comboChanceByPhase != null && p >= 0 && p < comboChanceByPhase.Length ? comboChanceByPhase[p] : 0f;
     }
 
     /// <summary>Blends the interval bands so the cadence tightens gradually instead of stepping.</summary>
@@ -155,7 +159,7 @@ public class RuleManager : MonoBehaviour
         }
 
         float t = gm.SurvivalTime;
-        if (t >= nextRuleAt && !HasPending()) Schedule(gm, t, intensity);
+        if (t >= nextRuleAt && !HasPending() && !SchedulingPaused) Schedule(gm, t, intensity);
     }
 
     void FinishSlot(GameManager gm, int index, Slot s)
@@ -253,9 +257,9 @@ public class RuleManager : MonoBehaviour
         return false;
     }
 
-    void Queue(RuleBase rule)
+    void Queue(RuleBase rule, bool silent = false, float warningOverride = 0f)
     {
-        var slot = new Slot { Rule = rule, WarnRemaining = rule.definition.warningDuration };
+        var slot = new Slot { Rule = rule, WarnRemaining = warningOverride > 0f ? warningOverride : rule.definition.warningDuration, Silent = silent };
         if (slots.Count > 0)
         {
             int id = ++comboCounter;
@@ -267,8 +271,8 @@ public class RuleManager : MonoBehaviour
         recent.Add(rule);
         if (recent.Count > 2) recent.RemoveAt(0);
         rule.BeginWarning();
-        AudioManager.Play(Sfx.Warning);
-        RuleWarning?.Invoke(rule, rule.definition.warningDuration);
+        if (!silent) AudioManager.Play(Sfx.Warning);
+        RuleWarning?.Invoke(rule, slot.WarnRemaining);
     }
 
     /// <summary>Test / debug hook: queues a rule by id right now if it is allowed (same checks as the scheduler).</summary>
@@ -279,6 +283,48 @@ public class RuleManager : MonoBehaviour
         foreach (var r in rules)
             if (r.Id == id && !IsQueued(r) && CanRunTogether(r) && !HasPending()) { Queue(r); return true; }
         return false;
+    }
+
+    /// <summary>True if the warning for this rule was started by a mutation (its own banner is suppressed).</summary>
+    public bool IsSilentWarning(RuleBase rule)
+    {
+        foreach (var s in slots) if (s.Rule == rule) return s.Silent;
+        return false;
+    }
+
+    /// <summary>A mutation's base rule is usable if it is already active, or could be started alongside the current rules.</summary>
+    public bool IsEligibleBase(string id)
+    {
+        foreach (var r in rules)
+        {
+            if (r.Id != id) continue;
+            if (IsRuleActive(id)) return true;
+            return !IsQueued(r) && CanRunTogether(r);
+        }
+        return false;
+    }
+
+    /// <summary>Starts a rule for a mutation with a silent (no banner) warning of the given length. Returns true if the rule is active or queued.</summary>
+    public bool QueueForMutation(string id, float warning)
+    {
+        var gm = GameManager.Instance;
+        if (gm == null || gm.State != GameState.Playing) return false;
+        if (IsRuleActive(id)) return true;
+        foreach (var r in rules)
+        {
+            if (r.Id != id) continue;
+            if (IsQueued(r) || !CanRunTogether(r)) return IsQueued(r);
+            Queue(r, true, warning);
+            return true;
+        }
+        return false;
+    }
+
+    /// <summary>Makes sure an active rule lasts at least this many more seconds (so a mutation never outlives its base rule).</summary>
+    public void EnsureRemaining(string id, float seconds)
+    {
+        foreach (var s in slots)
+            if (s.Active && s.Rule.Id == id && s.Remaining < seconds) { s.Remaining = seconds; s.Total = Mathf.Max(s.Total, seconds); }
     }
 
     public bool IsRuleActive(string id)

@@ -8,7 +8,10 @@ public class RuleAnnouncementUI : MonoBehaviour
     RectTransform banner, toast;
     CanvasGroup bannerGroup, toastGroup;
     Image border, toastBorder, bar, icon;
-    Text nameText, subText, toastText, bang;
+    Text nameText, subText, toastText, bang, header, countText;
+    bool activated;
+    float activatedHold;
+    int lastCount = -1;
     RuleBase current;
     float bannerT = 1f;       // animation time since shown (unscaled)
     bool bannerShown;
@@ -31,7 +34,7 @@ public class RuleAnnouncementUI : MonoBehaviour
 
         var inner = UIKit.Panel(root, "Banner", UIKit.NavyDeep, UIKit.Cyan, out border, 18f, 4f);
         banner = border.rectTransform;
-        UIKit.Place(banner, new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0f, -160f), new Vector2(720f, 136f));
+        UIKit.Place(banner, new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0f, -160f), new Vector2(760f, 150f));
         bannerGroup = banner.gameObject.AddComponent<CanvasGroup>();
         bannerGroup.blocksRaycasts = false;
 
@@ -41,9 +44,16 @@ public class RuleAnnouncementUI : MonoBehaviour
         UIKit.Stretch(bang.rectTransform, 0, 0, 22, 0);
 
         nameText = UIKit.Label(inner.transform, "Name", "RULE", 60, Color.white, TextAnchor.MiddleLeft, FontStyle.Bold, true);
-        UIKit.Place(nameText.rectTransform, new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(140f, -14f), new Vector2(560f, 76f));
+        UIKit.Place(nameText.rectTransform, new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(140f, -36f), new Vector2(470f, 62f));
+        UIKit.Fit(nameText, 22, 52);
+        header = UIKit.Label(inner.transform, "Header", "NEW RULE INCOMING", 18, UIKit.Lavender, TextAnchor.MiddleLeft, FontStyle.Bold);
+        UIKit.Place(header.rectTransform, new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(142f, -10f), new Vector2(470f, 22f));
+        countText = UIKit.Label(inner.transform, "Count", "3", 84, Color.white, TextAnchor.MiddleCenter, FontStyle.Bold, true);
+        UIKit.Place(countText.rectTransform, new Vector2(1f, 0.5f), new Vector2(1f, 0.5f), new Vector2(-18f, 4f), new Vector2(120f, 110f));
+        UIKit.Fit(countText, 40, 84);
         subText = UIKit.Label(inner.transform, "Sub", "INSTRUCTION", 28, UIKit.Lavender, TextAnchor.MiddleLeft);
-        UIKit.Place(subText.rectTransform, new Vector2(0f, 0f), new Vector2(0f, 0f), new Vector2(142f, 18f), new Vector2(560f, 36f));
+        UIKit.Place(subText.rectTransform, new Vector2(0f, 0f), new Vector2(0f, 0f), new Vector2(142f, 18f), new Vector2(470f, 30f));
+        UIKit.Fit(subText, 16, 26);
 
         var barBg = UIKit.Img(inner.transform, "BarBg", UIKit.White, new Color(0f, 0f, 0.1f, 0.6f));
         barBg.rectTransform.anchorMin = Vector2.zero; barBg.rectTransform.anchorMax = new Vector2(1f, 0f);
@@ -89,18 +99,26 @@ public class RuleAnnouncementUI : MonoBehaviour
 
     void OnWarning(RuleBase rule, float duration)
     {
+        if (rules.IsSilentWarning(rule)) return; // started by a mutation: the mutation banner covers it
         current = rule;
         var d = rule.definition;
         nameText.text = d.displayName;
         subText.text = d.subtitle;
         border.color = icon.color = bar.color = d.accent;
+        activated = false; lastCount = -1;
+        header.text = "NEW RULE INCOMING"; countText.text = Mathf.CeilToInt(duration).ToString();
         bannerShown = true; bannerT = 0f;
         toastGroup.alpha = 0f; toastTime = 99f;
     }
 
     void OnActivated(RuleBase rule)
     {
-        if (rule == current) bannerShown = false; // fade out; rule now lives in the active rules panel
+        if (rule != current) return;
+        // brief confirmation, then fade out; the rule now lives in the active rules panel
+        activated = true; activatedHold = 0.9f;
+        header.text = "RULE ACTIVATED!";
+        countText.text = "GO!";
+        bar.fillAmount = 1f;
     }
 
     void OnEnded(RuleBase rule, bool completed)
@@ -124,10 +142,26 @@ public class RuleAnnouncementUI : MonoBehaviour
             bannerGroup.alpha = a;
             float pulse = 1f + 0.03f * Mathf.Sin(bannerT * 12f);
             icon.rectTransform.localScale = Vector3.one * pulse;
-            if (current != null)
+            if (activated)
+            {
+                activatedHold -= dt;
+                if (activatedHold <= 0f) bannerShown = false;
+            }
+            else if (current != null)
+            {
                 for (int i = 0; i < rules.SlotCount; i++)
                     if (rules.TryGetSlot(i, out var r, out bool active, out float remaining, out float total) && r == current && !active)
+                    {
                         bar.fillAmount = total > 0f ? remaining / total : 0f;
+                        int count = Mathf.Max(1, Mathf.CeilToInt(remaining));
+                        if (count != lastCount)
+                        {
+                            lastCount = count;
+                            countText.text = count.ToString();
+                            AudioManager.Play(Sfx.Click, 0.5f); // 3, 2, 1 tick
+                        }
+                    }
+            }
         }
         else if (bannerGroup.alpha > 0f)
         {

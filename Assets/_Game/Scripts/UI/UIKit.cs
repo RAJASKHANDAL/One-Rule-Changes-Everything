@@ -168,6 +168,16 @@ public static class UIKit
         return t;
     }
 
+    /// <summary>Makes a label shrink to fit its box instead of overflowing into neighbours.</summary>
+    public static Text Fit(Text t, int min, int max)
+    {
+        t.resizeTextForBestFit = true;
+        t.resizeTextMinSize = min; t.resizeTextMaxSize = max;
+        t.horizontalOverflow = HorizontalWrapMode.Wrap;
+        t.verticalOverflow = VerticalWrapMode.Truncate;
+        return t;
+    }
+
     public static Button MakeButton(Transform parent, string name, string label, Vector2 size, Color fill, Color border, Color textColor, int fontSize, Action onClick)
     {
         var inner = Panel(parent, name, Color.white, border, out var outer, 14f, 3f, true);

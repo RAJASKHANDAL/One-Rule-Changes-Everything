@@ -1,7 +1,7 @@
 using System.Collections.Generic;
 using UnityEngine;
 
-public enum Sfx { Click, Coin, Jump, Land, Hurt, Warning, RuleStart, RuleEnd, GameOver, Flip, LowHealth, Bonus }
+public enum Sfx { Click, Coin, Jump, Land, Hurt, Warning, RuleStart, RuleEnd, GameOver, Flip, LowHealth, Bonus, Combo, NearMiss, MissionDone, NewBest, RealityBreak, Mutation }
 
 /// <summary>
 /// Sound effects plus an intensity-driven three-layer music bed. Everything is generated procedurally so no audio assets
@@ -121,6 +121,12 @@ public class AudioManager : MonoBehaviour
         clips[Sfx.Flip] = Make("flip", new Note(0.3f, 200, 900));
         clips[Sfx.LowHealth] = Make("lowhealth", new Note(0.09f, 90, 60), new Note(0.08f, 0, 0), new Note(0.12f, 80, 50));
         clips[Sfx.Bonus] = Make("bonus", new Note(0.06f, 784, 784), new Note(0.06f, 988, 988), new Note(0.14f, 1319, 1319));
+        clips[Sfx.Combo] = Make("combo", new Note(0.05f, 880, 880), new Note(0.05f, 1109, 1109), new Note(0.05f, 1319, 1319), new Note(0.12f, 1760, 1760));
+        clips[Sfx.NearMiss] = Make("nearmiss", new Note(0.12f, 600, 1500));
+        clips[Sfx.MissionDone] = Make("mission", new Note(0.08f, 523, 523), new Note(0.08f, 659, 659), new Note(0.08f, 784, 784), new Note(0.2f, 1047, 1047));
+        clips[Sfx.RealityBreak] = Make("realitybreak", new Note(0.35f, 110, 220, true), new Note(0.35f, 220, 440), new Note(0.45f, 440, 1200));
+        clips[Sfx.Mutation] = Make("mutation", new Note(0.12f, 330, 330, true), new Note(0.12f, 392, 392, true), new Note(0.12f, 494, 494, true), new Note(0.3f, 660, 990));
+        clips[Sfx.NewBest] = Make("newbest", new Note(0.1f, 659, 659), new Note(0.1f, 784, 784), new Note(0.1f, 988, 988), new Note(0.1f, 784, 784), new Note(0.3f, 1319, 1319));
     }
 
     static AudioClip Make(string name, params Note[] notes)
